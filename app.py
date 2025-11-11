@@ -1,21 +1,27 @@
 # app.py
+# Importa las librerías necesarias
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from sympy import sympify, diff, sqrt, integrate, symbols, lambdify, latex
 import numpy as np
+import os # Necesario para que send_from_directory funcione correctamente
 
 # Inicializar la aplicación Flask
-app = Flask(__name__)
-# Configurar CORS para permitir peticiones desde el frontend
+# 'static_folder=None' previene conflictos con la ruta raíz
+app = Flask(__name__, static_folder=None)
+
+# Configurar CORS (Aunque ahora servimos todo desde el mismo origen, 
+# es bueno mantenerlo por si acaso)
 CORS(app)
 
-# --- ¡NUEVA RUTA PARA SERVIR LA PÁGINA WEB! ---
+# --- RUTA PARA SERVIR LA PÁGINA WEB (index.html) ---
+# Esta es la nueva ruta que hace que tu app esté autocontenida
 @app.route('/')
 def index():
-    # Esta línea le dice a Flask que envíe el archivo 'index.html'
-    # cuando alguien visite la raíz de tu sitio web.
+    # Sirve el archivo 'index.html' desde el directorio actual ('.')
     return send_from_directory('.', 'index.html')
 
+# --- RUTA PARA LA API DE CÁLCULO ---
 @app.route('/calcular', methods=['POST'])
 def calcular_longitud_arco():
     # 1. Obtener los datos JSON enviados desde el frontend
@@ -24,29 +30,30 @@ def calcular_longitud_arco():
     a_str = datos['limite_a']
     b_str = datos['limite_b']
     
-    pasos = []
+    pasos = [] # Lista para almacenar los pasos de la solución
     try:
-        # 2. Convertir límites a números
+        # 2. Convertir límites a números de punto flotante
         a = float(a_str)
         b = float(b_str)
 
         # 3. Detectar la variable automáticamente (x, y, z, etc.)
         f = sympify(funcion_str) # Convertir el string a una expresión SymPy
         
-        variables = f.free_symbols
+        variables = f.free_symbols # Obtener las variables (ej: {x})
         
         if len(variables) > 1:
+            # Error si la función tiene más de una variable (ej: "x*y")
             raise Exception(f"La función debe tener solo una variable, pero se encontraron: {variables}")
         elif len(variables) == 0:
             variable = symbols('x') # Usar 'x' por defecto si es una constante (ej: "5")
         else:
             variable = variables.pop() # Obtener la variable encontrada (ej: 'y' o 'z')
 
-        # 4. Generar el LaTeX para la función principal
+        # 4. Generar el LaTeX para la función principal (para la vista previa)
         funcion_latex = f"f({variable}) = {latex(f)}"
-        pasos.append(f"Función: ${funcion_latex}$")
+        pasos.append(f"Función: ${funcion_latex}$") # Añadir como primer paso
 
-        # 5. Calcular la derivada (usando la variable detectada)
+        # 5. Calcular la derivada
         f_prima = diff(f, variable)
         pasos.append(f"Derivada: $f'({variable}) = {latex(f_prima)}$")
 
@@ -67,24 +74,25 @@ def calcular_longitud_arco():
         longitud_arco = integrate(integrando, (variable, a, b))
         longitud_arco_num = longitud_arco.evalf() # Valor numérico
         
-        pasos.append(f"Resultado exacto: $L = {latex(longitud_arco)}$")
+        pasos.append(f"Resultado exacto: $L = {latex(longitud_arco)}$") # Último paso
         
         # 10. Generar puntos para la gráfica
-        f_numerica = lambdify(variable, f, 'numpy')
+        # Convertir la expresión de SymPy en una función numérica rápida
+        f_numerica = lambdify(variable, f, 'numpy') 
         x_vals = np.linspace(a, b, 100) # 100 puntos para una curva suave
         y_vals = f_numerica(x_vals)
 
-        # Formato de puntos {x, y} para Chart.js con eje lineal
+        # Crear formato de puntos {x, y} para Chart.js con eje lineal
         puntos_grafico = [{'x': x_val, 'y': y_val} for x_val, y_val in zip(x_vals, y_vals)]
 
         # 11. Enviar la respuesta completa como JSON
         return jsonify({
             'success': True,
-            'resultado': str(longitud_arco_num),
-            'resultado_exacto': str(longitud_arco),
-            'pasos': pasos,
-            'grafico': puntos_grafico,
-            'funcion_latex_display': funcion_latex # Enviamos el LaTeX de la función por separado
+            'resultado': str(longitud_arco_num), # Resultado numérico como string
+            'resultado_exacto': str(longitud_arco), # Resultado simbólico
+            'pasos': pasos, # Lista de pasos en formato LaTeX
+            'grafico': puntos_grafico, # Datos para el gráfico
+            'funcion_latex_display': funcion_latex # LaTeX para la vista previa
         })
 
     except Exception as e:
@@ -94,7 +102,8 @@ def calcular_longitud_arco():
             'error': f"Error en el cálculo: {str(e)}"
         })
 
-# Iniciar el servidor cuando se ejecuta el script
+# Iniciar el servidor cuando se ejecuta el script directamente
+# Gunicorn usará el objeto 'app', pero esto permite la ejecución local
 if __name__ == '__main__':
-
-    app.run(debug=True)
+    # 'host="0.0.0.0"' hace que sea accesible en tu red local (opcional)
+    app.run(debug=True, host="0.0.0.0")
