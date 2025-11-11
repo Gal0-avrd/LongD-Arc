@@ -52,17 +52,17 @@
             
             <div class="mb-3">
                 <label for="funcion" class="form-label"><b>Función f(x) =</b></label>
-                <input type="text" v-model="funcion" id="funcion" class="form-control" placeholder="Ej: (2/3)*x**(3/2)">
+                <input type="text" v-model="funcion" id="funcion" class="form-control" placeholder="Ingresar Función">
                 <small class="form-text text-muted">Usa la sintaxis de Python (ej: `x**2` para x², `z**3` para z³).</small>
             </div>
             <div class="row">
                 <div class="col">
                     <label for="limite_a" class="form-label"><b>Desde =</b></label>
-                    <input type="text" v-model="limite_a" id="limite_a" class="form-control" placeholder="Ej: 0">
+                    <input type="text" v-model="limite_a" id="limite_a" class="form-control" placeholder="Ej: a">
                 </div>
                 <div class="col">
                     <label for="limite_b" class="form-label"><b>Hasta =</b></label>
-                    <input type="text" v-model="limite_b" id="limite_b" class="form-control" placeholder="Ej: 3">
+                    <input type="text" v-model="limite_b" id="limite_b" class="form-control" placeholder="Ej: b">
                 </div>
             </div>
             
@@ -128,9 +128,9 @@
     createApp({
         data() {
             return {
-                funcion: '(2/3)*x**(3/2)',
-                limite_a: '0',
-                limite_b: '3',
+                funcion: '',
+                limite_a: '',
+                limite_b: '',
                 resultado: '',
                 resultado_exacto: '',
                 funcion_latex: '', // Para la vista previa de la función
@@ -248,4 +248,5 @@
     }).mount('#app')
 </script>
 </body>
+
 </html>
