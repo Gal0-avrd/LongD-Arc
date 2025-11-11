@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Longitud de Arco</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script"></script>
+    
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 700px; }
+        #resultado { font-size: 1.5rem; font-weight: bold; }
+        
+        /* Estilo para los pasos */
+        .paso {
+            background-color: #e9ecef;
+            border-left: 4px solid #0d6efd;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+            overflow-x: auto; /* Para fórmulas muy largas */
+        }
+        
+        /* Estilo para la previsualización de la función */
+        #funcionPreview {
+            font-size: 1.8rem;
+            text-align: center;
+            padding: 10px 0;
+            margin: 0;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container mt-5">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white text-center">
+            <h3>📏 Calculadora de Longitud de Arco</h3>
+        </div>
+        <div class="card-body">
+            
+            <div class="mb-3">
+                <label for="funcion" class="form-label"><b>Función f(x) =</b></label>
+                <input type="text" v-model="funcion" id="funcion" class="form-control" placeholder="Ej: (2/3)*x**(3/2)">
+                <small class="form-text text-muted">Usa la sintaxis de Python (ej: `x**2` para x², `z**3` para z³).</small>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <label for="limite_a" class="form-label"><b>Desde =</b></label>
+                    <input type="text" v-model="limite_a" id="limite_a" class="form-control" placeholder="Ej: 0">
+                </div>
+                <div class="col">
+                    <label for="limite_b" class="form-label"><b>Hasta =</b></label>
+                    <input type="text" v-model="limite_b" id="limite_b" class="form-control" placeholder="Ej: 3">
+                </div>
+            </div>
+            
+            <div class="d-grid gap-2 mt-4">
+                <button @click="calcular" class="btn btn-primary btn-lg" :disabled="cargando">
+                    <span v-if="cargando" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    {{ cargando ? 'Calculando...' : 'Calcular Longitud' }}
+                </button>
+            </div>
+
+            <div v-if="funcion_latex" class="mt-3 p-3 bg-white border rounded shadow-sm">
+                <h5 class="mb-2 text-center">Función a calcular:</h5>
+                <p id="funcionPreview"></p>
+            </div>
+
+            <div v-if="error" class="alert alert-danger mt-4">
+                {{ error }}
+            </div>
+
+            <div v-if="resultado" class="mt-4">
+                
+                <div class="p-3 bg-light rounded">
+                    <h4>Resultado:</h4>
+                    <p id="resultado" class="text-success">L ≈ {{ resultado }}</p>
+                    <p class="mb-0"><b>Valor Exacto:</b></p>
+                    <div class="paso" v-html="pasos[pasos.length - 1]"></div>
+                </div>
+                
+                <div class="mt-4">
+                    <h5>Gráfica de la función</h5>
+                    <canvas id="graficoCanvas"></canvas>
+                </div>
+
+                <div class="accordion mt-3" id="acordeonPasos">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                Mostrar/Ocultar Pasos de la Solución
+                            </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#acordeonPasos">
+                            <div class="accordion-body">
+                                <div v-for="(paso, index) in pasos.slice(0, -1)" 
+                                     class="paso" 
+                                     v-html="paso">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        data() {
+            return {
+                funcion: '(2/3)*x**(3/2)',
+                limite_a: '0',
+                limite_b: '3',
+                resultado: '',
+                resultado_exacto: '',
+                funcion_latex: '', // Para la vista previa de la función
+                pasos: [],
+                error: '',
+                cargando: false,
+                chartInstance: null // Para guardar la instancia del gráfico
+            }
+        },
+        methods: {
+            // Método para dibujar/actualizar el gráfico
+            renderizarGrafico(puntosGrafico) {
+                const ctx = document.getElementById('graficoCanvas').getContext('2d');
+                
+                if (this.chartInstance) {
+                    this.chartInstance.destroy(); // Destruir gráfico anterior
+                }
+
+                this.chartInstance = new Chart(ctx, {
+                    type: 'line', 
+                    data: {
+                        datasets: [
+                        {
+                            // Dataset 1: ÁREA SOMBREADA
+                            label: 'Área de Integración',
+                            data: puntosGrafico,
+                            fill: 'start', // Rellena el área
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'transparent',
+                            pointRadius: 0,
+                        },
+                        {
+                            // Dataset 2: LÍNEA DE LA FUNCIÓN
+                            label: `f(x)`, // Etiqueta simple
+                            data: puntosGrafico,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2.5,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            fill: false // No rellenar la línea
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            x: {
+                                type: 'linear', // Eje X es numérico, no de etiquetas
+                                title: { display: true, text: 'x' }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'f(x)' }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            // Método principal para calcular
+            async calcular() {
+                this.cargando = true;
+                this.error = '';
+                this.resultado = '';
+                this.funcion_latex = ''; // Limpiar al inicio
+
+                try {
+                    const response = await fetch('/calcular', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            funcion: this.funcion,
+                            limite_a: this.limite_a,
+                            limite_b: this.limite_b
+                        })
+                    });
+                    
+                    const data = await response.json();
+
+                    if (data.success) {
+                        // Guardar todos los datos recibidos
+                        this.resultado = data.resultado;
+                        this.resultado_exacto = data.resultado_exacto;
+                        this.pasos = data.pasos;
+                        this.funcion_latex = data.funcion_latex_display;
+
+                        // Esperar a que Vue actualice el DOM ($nextTick)
+                        this.$nextTick(() => {
+                            // 1. Renderizar el gráfico
+                            this.renderizarGrafico(data.grafico);
+                            
+                            // 2. Renderizar TODO el MathJax
+                            if (window.MathJax) {
+                                // Primero, poner el LaTeX en el contenedor de vista previa
+                                const previewEl = document.getElementById('funcionPreview');
+                                if (previewEl) {
+                                    previewEl.innerHTML = `\$${this.funcion_latex}\$`;
+                                }
+                                
+                                // Pedir a MathJax que formatee toda la página
+                                // Esto formateará tanto la vista previa como los pasos
+                                window.MathJax.typesetPromise();
+                            }
+                        });
+                        
+                    } else {
+                        this.error = data.error;
+                    }
+                } catch (e) {
+                    console.error("Error detallado:", e);
+                    this.error = `Error al procesar la respuesta: ${e.message}`;
+                } finally {
+                    this.cargando = false;
+                }
+            }
+        }
+    }).mount('#app')
+</script>
+</body>
+</html>
